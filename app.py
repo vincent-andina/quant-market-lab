@@ -21,6 +21,15 @@ st.caption("US Equity Research | Market Analysis | Factor Modelling")
 
 st.sidebar.header("Research Settings")
 
+# -------------------------------
+# MANUAL DATA REFRESH
+# -------------------------------
+
+if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
+
+
 stocks = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA"]
 
 selected_stock = st.sidebar.selectbox(
