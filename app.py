@@ -141,6 +141,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # TAB 1: MARKET OVERVIEW
 # -------------------------------
 
+
 with tab1:
     st.header("Market Overview")
 
@@ -156,84 +157,317 @@ with tab1:
 
     # Keep the overview compact: explanations open only when requested.
     c1, c2, c3, c4 = st.columns(4)
+
     c1.metric("Latest Price", f"${latest_price:,.2f}")
     c2.metric("Latest Daily Return", f"{latest_return:+.2f}%")
+
     c3.metric("Annualised Volatility", f"{annual_vol:.2f}%")
+
     with c3.popover("ⓘ How is this calculated?"):
-        st.markdown(
-            "**Daily volatility** is the sample standard deviation of daily "
-            "returns, measuring dispersion around their average (not direction)."
-        )
-        st.latex(r"s_{daily}=\sqrt{\frac{\sum_{i=1}^{n}(R_i-\bar R)^2}{n-1}}")
-        st.markdown(
-            r"Here, $R_i$ is each daily return, $\bar R$ is the average "
-            "daily return, and $n$ is the number of observations. "
-            "The denominator is $n-1$ because pandas `.std()` uses the "
-            "sample standard deviation."
-        )
-        st.latex(r"\sigma_{annual}=s_{daily}\sqrt{252}")
-        st.markdown(
-            "**Why √252?** There are roughly 252 US trading days in a year. "
-            "If daily returns are independent with constant variance, "
-            "the variance of their 252-day sum is 252 times daily variance. "
-            "Standard deviation is the square root of variance, so it "
-            "scales by √252 ≈ 15.87, not by 252."
-        )
+        st.markdown(r"""
+### Daily Volatility
+
+**Daily volatility** is the sample standard deviation of daily returns.
+It measures how much daily returns fluctuate around their average,
+regardless of whether returns are positive or negative.
+
+The sample standard deviation is:
+
+$$
+s_{\text{daily}} =
+\sqrt{
+\frac{
+\sum_{i=1}^{n}(R_i-\bar{R})^2
+}{
+n-1
+}
+}
+$$
+
+Where:
+
+- $R_i$ = return on day $i$
+- $\bar{R}$ = average daily return
+- $n$ = number of daily return observations
+
+The expression inside the square root is the **sample variance**.
+
+We divide by $n-1$ because we are estimating variance from a sample.
+This is also the default behaviour of `pandas.std()`.
+
+---
+
+### Why Multiply by the Square Root of 252?
+
+**Step 1: Understand the addition property of variances**
+
+For two random variables $A$ and $B$:
+
+$$
+\operatorname{Var}(A+B)
+=
+\operatorname{Var}(A)
++
+\operatorname{Var}(B)
++
+2\operatorname{Cov}(A,B)
+$$
+
+If $A$ and $B$ are independent, their covariance is zero.
+
+Therefore:
+
+$$
+\boxed{
+\operatorname{Var}(A+B)
+=
+\operatorname{Var}(A)
++
+\operatorname{Var}(B)
+}
+$$
+
+**Key concept:** The variance of the sum of independent
+random variables equals the sum of their individual variances.
+
+---
+
+**Step 2: Extend this property to multiple trading days**
+
+Suppose every day's return has the same variance:
+
+$$
+\operatorname{Var}(R_i)=\sigma_{\text{daily}}^2
+$$
+
+For 2 independent trading days:
+
+$$
+\operatorname{Var}(R_1+R_2)
+=
+2\sigma_{\text{daily}}^2
+$$
+
+For 3 independent trading days:
+
+$$
+\operatorname{Var}(R_1+R_2+R_3)
+=
+3\sigma_{\text{daily}}^2
+$$
+
+For $T$ independent trading days:
+
+$$
+\boxed{
+\operatorname{Var}(R_1+\cdots+R_T)
+=
+T\sigma_{\text{daily}}^2
+}
+$$
+
+Therefore, **variance increases linearly with the number
+of trading days**.
+
+---
+
+**Step 3: Convert variance into standard deviation**
+
+Standard deviation is the square root of variance:
+
+$$
+\sigma_T
+=
+\sqrt{\operatorname{Var}(R_1+\cdots+R_T)}
+$$
+
+Substitute the variance addition formula:
+
+$$
+\sigma_T
+=
+\sqrt{T\sigma_{\text{daily}}^2}
+$$
+
+Using the square root property:
+
+$$
+\sqrt{ab}=\sqrt{a}\sqrt{b}
+$$
+
+We obtain:
+
+$$
+\sigma_T
+=
+\sqrt{T}\sqrt{\sigma_{\text{daily}}^2}
+$$
+
+Since volatility is non-negative:
+
+$$
+\boxed{
+\sigma_T=\sqrt{T}\sigma_{\text{daily}}
+}
+$$
+
+**Key concept:** Variance scales linearly with time,
+but standard deviation scales with the square root of time.
+
+---
+
+**Step 4: Annualise using 252 trading days**
+
+The US stock market has approximately 252 trading days per year.
+
+Setting $T=252$:
+
+$$
+\boxed{
+\sigma_{\text{annual}}
+=
+\sigma_{\text{daily}}\sqrt{252}
+}
+$$
+
+Since:
+
+$$
+\sqrt{252}\approx15.87
+$$
+
+Annualised volatility is approximately 15.87 times daily volatility.
+
+---
+
+### Numerical Example
+
+Suppose daily volatility is 2%.
+
+Daily variance:
+
+$$
+\sigma_{\text{daily}}^2
+=
+0.02^2
+=
+0.0004
+$$
+
+Annual variance:
+
+$$
+\sigma_{\text{annual}}^2
+=
+252\times0.0004
+=
+0.1008
+$$
+
+Taking the square root:
+
+$$
+\sigma_{\text{annual}}
+=
+\sqrt{0.1008}
+\approx31.75\%
+$$
+
+Therefore:
+
+$$
+\boxed{
+\sigma_{\text{annual}}\approx31.75\%
+}
+$$
+
+This is an estimate of the standard deviation of annual returns,
+not an expected annual return or maximum possible loss.
+""")
+
         st.info(
             f"For {selected_stock}: {daily_vol:.2f}% daily volatility × √252 "
-            f"= **{annual_vol:.2f}% annualised volatility**. "
-            "For example, 2% daily volatility becomes about 31.75% annually."
+            f"= **{annual_vol:.2f}% annualised volatility**."
         )
+
         st.caption(
-            "This is a historical risk estimate, not an expected return or "
-            "maximum loss. Square-root scaling is approximate for compounded "
-            "returns and may fail with serial correlation or changing volatility."
+            "Assumes independent daily returns with constant variance. "
+            "The variance derivation applies to sums of returns; "
+            "simple percentage returns compound rather than add exactly. "
+            "Square-root scaling may be inaccurate with serial correlation "
+            "or changing volatility."
         )
+
     c4.metric("Period Return", f"{total_return:+.2f}%")
 
-    # Fundamentals are current Yahoo Finance figures, not historical as-of-date.
+    # Fundamentals are current Yahoo Finance figures,
+    # not historical as-of-date.
     try:
         fundamentals = load_fundamentals(selected_stock)
     except Exception:
-        fundamentals = {"trailing_pe": None, "trailing_eps": None}
+        fundamentals = {
+            "trailing_pe": None,
+            "trailing_eps": None
+        }
 
-    pe_value = format_fundamental(fundamentals["trailing_pe"], "×")
-    eps_value = format_fundamental(fundamentals["trailing_eps"])
-    eps_display = f"${eps_value}" if eps_value != "N/A" else "N/A"
+    pe_value = format_fundamental(
+        fundamentals["trailing_pe"], "×"
+    )
+    eps_value = format_fundamental(
+        fundamentals["trailing_eps"]
+    )
+    eps_display = (
+        f"${eps_value}" if eps_value != "N/A" else "N/A"
+    )
 
     v1, v2 = st.columns(2)
+
     v1.metric("Trailing P/E Ratio", pe_value)
+
     with v1.popover("ⓘ What is P/E?"):
         st.markdown(
             "**Price-to-Earnings (P/E)** compares the current share price "
             "with earnings per share over the trailing twelve months."
         )
-        st.latex(r"P/E=\frac{\text{Current share price}}{\text{Trailing EPS}}")
+
+        st.latex(
+            r"P/E=\frac{\text{Current share price}}"
+            r"{\text{Trailing EPS}}"
+        )
+
         st.markdown(
             "A P/E of 20× means investors pay $20 per share for each "
             "$1 of annual earnings per share. It is not, by itself, "
             "a measure of whether a stock is cheap or expensive."
         )
+
         st.caption(
             "Latest available Yahoo Finance trailing P/E; may be unavailable "
             "for negative earnings. Not tied to the selected historical period."
         )
 
     v2.metric("Trailing EPS", eps_display)
+
     with v2.popover("ⓘ What is EPS?"):
         st.markdown(
             "**Earnings Per Share (EPS)** measures earnings attributable "
             "to each weighted-average common share outstanding. "
             "Trailing EPS generally covers the latest twelve months."
         )
+
         st.latex(
             r"EPS=\frac{\text{Earnings attributable to common shareholders}}"
             r"{\text{Weighted-average common shares}}"
         )
+
         st.caption(
             "Latest available Yahoo Finance trailing EPS, which may be "
             "missing or revised. Not tied to the selected historical period."
         )
+
+    # -------------------------------
+    # HISTORICAL ADJUSTED PRICE
+    # -------------------------------
 
     st.subheader("Historical Adjusted Price")
 
@@ -241,12 +475,18 @@ with tab1:
         stock_prices,
         title=f"{selected_stock} Adjusted Closing Price"
     )
+
     fig.update_layout(
         xaxis_title="Date",
         yaxis_title="Price (USD)",
         showlegend=False
     )
+
     st.plotly_chart(fig, use_container_width=True)
+
+    # -------------------------------
+    # DAILY RETURN DISTRIBUTION
+    # -------------------------------
 
     st.subheader("Daily Return Distribution")
 
@@ -255,12 +495,18 @@ with tab1:
         nbins=60,
         title="Distribution of Daily Returns"
     )
+
     fig.update_layout(
         xaxis_title="Daily Return (%)",
         yaxis_title="Frequency",
         showlegend=False
     )
+
     st.plotly_chart(fig, use_container_width=True)
+
+    # -------------------------------
+    # NORMALISED PRICE COMPARISON
+    # -------------------------------
 
     st.subheader("Normalised Price Comparison")
 
@@ -273,11 +519,14 @@ with tab1:
             normalised,
             title="Growth of $100 (Adjusted Prices)"
         )
+
         fig.update_layout(
             xaxis_title="Date",
             yaxis_title="Indexed Value"
         )
+
         st.plotly_chart(fig, use_container_width=True)
+
 
 # -------------------------------
 # TAB 2: CORRELATION
