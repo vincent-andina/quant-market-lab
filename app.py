@@ -1,4 +1,3 @@
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -75,6 +74,25 @@ def load_data(start, end):
     return prices.dropna(how="all").ffill(limit=3)
 
 
+@st.cache_data(ttl=3600)
+def load_fundamentals(ticker):
+    """Latest available Yahoo Finance valuation data (not historical as-of-date)."""
+    info = yf.Ticker(ticker).info
+    return {
+        "trailing_pe": info.get("trailingPE"),
+        "trailing_eps": info.get("trailingEps"),
+    }
+
+
+def format_fundamental(value, suffix=""):
+    """Show N/A for missing, non-numeric, or non-finite values."""
+    try:
+        number = float(value)
+        return f"{number:,.2f}{suffix}" if np.isfinite(number) else "N/A"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
 with st.spinner("Downloading market data..."):
     try:
         prices = load_data(
@@ -121,17 +139,92 @@ with tab1:
 
     latest_price = stock_prices.iloc[-1]
     latest_return = stock_returns.iloc[-1] * 100
+    daily_vol = stock_returns.std() * 100
     annual_vol = stock_returns.std() * np.sqrt(252) * 100
     total_return = (
         stock_prices.iloc[-1] / stock_prices.iloc[0] - 1
     ) * 100
 
+    # Keep the overview compact: explanations open only when requested.
     c1, c2, c3, c4 = st.columns(4)
-
     c1.metric("Latest Price", f"${latest_price:,.2f}")
     c2.metric("Latest Daily Return", f"{latest_return:+.2f}%")
     c3.metric("Annualised Volatility", f"{annual_vol:.2f}%")
+    with c3.popover("ⓘ How is this calculated?"):
+        st.markdown(
+            "**Daily volatility** is the sample standard deviation of daily "
+            "returns, measuring dispersion around their average (not direction)."
+        )
+        st.latex(r"s_{daily}=\sqrt{\frac{\sum_{i=1}^{n}(R_i-\bar R)^2}{n-1}}")
+        st.markdown(
+            r"Here, $R_i$ is each daily return, $\bar R$ is the average "
+            "daily return, and $n$ is the number of observations. "
+            "The denominator is $n-1$ because pandas `.std()` uses the "
+            "sample standard deviation."
+        )
+        st.latex(r"\sigma_{annual}=s_{daily}\sqrt{252}")
+        st.markdown(
+            "**Why √252?** There are roughly 252 US trading days in a year. "
+            "If daily returns are independent with constant variance, "
+            "the variance of their 252-day sum is 252 times daily variance. "
+            "Standard deviation is the square root of variance, so it "
+            "scales by √252 ≈ 15.87, not by 252."
+        )
+        st.info(
+            f"For {selected_stock}: {daily_vol:.2f}% daily volatility × √252 "
+            f"= **{annual_vol:.2f}% annualised volatility**. "
+            "For example, 2% daily volatility becomes about 31.75% annually."
+        )
+        st.caption(
+            "This is a historical risk estimate, not an expected return or "
+            "maximum loss. Square-root scaling is approximate for compounded "
+            "returns and may fail with serial correlation or changing volatility."
+        )
     c4.metric("Period Return", f"{total_return:+.2f}%")
+
+    # Fundamentals are current Yahoo Finance figures, not historical as-of-date.
+    try:
+        fundamentals = load_fundamentals(selected_stock)
+    except Exception:
+        fundamentals = {"trailing_pe": None, "trailing_eps": None}
+
+    pe_value = format_fundamental(fundamentals["trailing_pe"], "×")
+    eps_value = format_fundamental(fundamentals["trailing_eps"])
+    eps_display = f"${eps_value}" if eps_value != "N/A" else "N/A"
+
+    v1, v2 = st.columns(2)
+    v1.metric("Trailing P/E Ratio", pe_value)
+    with v1.popover("ⓘ What is P/E?"):
+        st.markdown(
+            "**Price-to-Earnings (P/E)** compares the current share price "
+            "with earnings per share over the trailing twelve months."
+        )
+        st.latex(r"P/E=\frac{\text{Current share price}}{\text{Trailing EPS}}")
+        st.markdown(
+            "A P/E of 20× means investors pay $20 per share for each "
+            "$1 of annual earnings per share. It is not, by itself, "
+            "a measure of whether a stock is cheap or expensive."
+        )
+        st.caption(
+            "Latest available Yahoo Finance trailing P/E; may be unavailable "
+            "for negative earnings. Not tied to the selected historical period."
+        )
+
+    v2.metric("Trailing EPS", eps_display)
+    with v2.popover("ⓘ What is EPS?"):
+        st.markdown(
+            "**Earnings Per Share (EPS)** measures earnings attributable "
+            "to each weighted-average common share outstanding. "
+            "Trailing EPS generally covers the latest twelve months."
+        )
+        st.latex(
+            r"EPS=\frac{\text{Earnings attributable to common shareholders}}"
+            r"{\text{Weighted-average common shares}}"
+        )
+        st.caption(
+            "Latest available Yahoo Finance trailing EPS, which may be "
+            "missing or revised. Not tied to the selected historical period."
+        )
 
     st.subheader("Historical Adjusted Price")
 
